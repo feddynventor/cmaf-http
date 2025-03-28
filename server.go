@@ -28,6 +28,7 @@ func (stream *InputStream) Serve() {
 	http.HandleFunc("/"+stream.repr.Id+"/", func(w http.ResponseWriter, r *http.Request) {
 		index, err := strconv.ParseUint(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:], 10, 32)
 		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		if err != nil {
 			w.WriteHeader(http.StatusOK)
@@ -52,6 +53,8 @@ func (stream *InputStream) Serve() {
 
 func serveFile(w http.ResponseWriter, r *http.Request, fd *memfd.Memfd, size int64) {
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", size))
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Timing-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
 
 	// Ensure headers are flushed before hijacking

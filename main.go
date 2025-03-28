@@ -85,7 +85,7 @@ func main() {
 				latest_time = stream.timestamp
 			}
 
-			// TODO: qui si incorre in inconsistenza se per una traccia non è ancora arrivato il nuovo
+			// TODO: qui si incorre in inconsistenza se per una traccia non è ancora arrivato il nuovo segmento e la window non shifta
 			sizes_map[stream.repr.Id] = stream.sizesWindow
 
 			// ritorno il frammento con PTS presente su tutti gli stream
@@ -95,6 +95,8 @@ func main() {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Timing-Allow-Origin", "*")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(Manifest{
 			Config:   config.Ingester,
@@ -109,14 +111,3 @@ func main() {
 	wg.Wait()
 
 }
-
-// for i := uint32(0); i < config.Ingester.Horizon; i++ {
-// 	frag, err := stream.fragments.Load(
-// 		last_sequence - config.Ingester.Horizon + i + 1)
-// 	if !err {
-// 		w.WriteHeader(http.StatusNotFound)
-// 		fmt.Fprintf(w, "Fragment %d not found", last_sequence-config.Ingester.Horizon+i+1)
-// 		return
-// 	}
-// 	sizes_map[stream.repr.Id] = append(sizes_map[stream.repr.Id], frag.(*Fragment).ByteLength/1000)
-// }
