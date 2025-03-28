@@ -79,6 +79,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 				Sequence:   seq,
 				Pts:        pts,
 			})
+			stream.fragments.Delete(stream.lastSeqNumber - 50)
 			break
 
 		case "mdat":
@@ -96,6 +97,9 @@ func (stream *InputStream) Parse(data io.Reader) {
 				fragment.(*Fragment).fd = file
 
 				stream.lastFrag = fragment.(*Fragment)
+
+				pts := (int)(fragment.(*Fragment).Pts)
+				fmt.Printf("Fragment %d, Size %d, PTS %02d:%02d\n", fragment.(*Fragment).Sequence, fragment.(*Fragment).ByteLength, pts/60, pts%60)
 
 				if len(stream.sizesWindow) == 0 {
 					stream.sizesWindow = make([]uint32, config.Ingester.Horizon)

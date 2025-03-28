@@ -1,18 +1,18 @@
 [Ingester]
-SegmentDuration = 5000
+SegmentDuration = 4000
 Horizon = 3
-
-[Representations.lq]
-Pipe = "/dev/shm/repr_480x270"
-
-[Representations.sd]
-Pipe = "/dev/shm/repr_1024x576"
-
-[Representations.hd]
-Pipe = "/dev/shm/repr_1280x720"
 
 [Representations.fhd]
 Pipe = "/dev/shm/repr_1920x1080"
 
+[Representations.hd]
+Pipe = "/dev/shm/repr_1280x720"
+
+[Representations.sd]
+Pipe = "/dev/shm/repr_1024x576"
+
+[Representations.lq]
+Pipe = "/dev/shm/repr_480x270"
+
 [Server]
-Address = "localhost:8080"
+Address = "0.0.0.0:8080"
