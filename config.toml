@@ -1,11 +1,6 @@
 [Ingester]
-SegmentDuration = 4000
-Horizon = 3
-
-[Representations.fhd]
-Pipe = "/dev/shm/repr_1920x1080"
-
-[Representations.hd]
+Horizon = 4               # this is the minimum latency in fragments [number of fragments]
+ControllerFrequency = 2   # how often the fragment samples are sent [number of fragments]
 Pipe = "/dev/shm/repr_1280x720"
 
 [Representations.sd]

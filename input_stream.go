@@ -4,28 +4,32 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math" // just for logging
 	"sync"
 	"time"
 
 	"github.com/justincormack/go-memfd"
+	"golang.org/x/sys/unix"
 )
 
 type Fragment struct {
 	moof       []byte       `json:"-"`
 	fd         *memfd.Memfd `json:"-"`
-	ByteLength uint32       `json:"-"`
-	Sequence   uint32       `json:"sequence"`
+	ByteLength uint32       `json:"size"`
+	Sequence   uint32       `json:"seq"`
 	Pts        float32      `json:"pts"`
+	Keyframe   bool         `json:"-"`
+	IFrameSize uint32       `json:"iframe"`
 }
 
 type InputStream struct {
-	repr          *Representation
-	fragments     sync.Map
-	lastFrag      *Fragment
-	lastSeqNumber uint32
-	timescale     uint32
-	moov          []byte
-	timestamp     time.Time
+	repr            *Representation
+	fragments       sync.Map
+	lastSeqNumber   uint32
+	timescale       uint32
+	moov            []byte
+	timestamp       time.Time
+	fragmentsWindow *CircularBuffer[Fragment]
 	sizesWindow   []uint32
 }
 
@@ -96,17 +100,16 @@ func (stream *InputStream) Parse(data io.Reader) {
 				file.SetSize(int64(fragment.(*Fragment).ByteLength))
 				fragment.(*Fragment).fd = file
 
-				stream.lastFrag = fragment.(*Fragment)
-
-				pts := (int)(fragment.(*Fragment).Pts)
-				fmt.Printf("Fragment %d, Size %d, PTS %02d:%02d\n", fragment.(*Fragment).Sequence, fragment.(*Fragment).ByteLength, pts/60, pts%60)
-
-				if len(stream.sizesWindow) == 0 {
-					stream.sizesWindow = make([]uint32, config.Ingester.Horizon)
-					stream.sizesWindow = append(stream.sizesWindow, uint32(fragment.(*Fragment).ByteLength/1000))
-				} else {
-					stream.sizesWindow = append(stream.sizesWindow[1:], uint32(fragment.(*Fragment).ByteLength/1000))[:config.Ingester.Horizon]
+				iframebytes := GetIFrameSize(fullAtom)
+				isIFrame := "X" // just debugging
+				if iframebytes > 0 {
+					isIFrame = "I" // just debugging
+					fragment.(*Fragment).IFrameSize = iframebytes
+					fragment.(*Fragment).Keyframe = true
+					}
 				}
+
+				stream.fragmentsWindow.Add(fragment.(*Fragment))
 			}
 			break
 		default:
