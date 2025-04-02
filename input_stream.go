@@ -106,6 +106,16 @@ func (stream *InputStream) Parse(data io.Reader) {
 					isIFrame = "I" // just debugging
 					fragment.(*Fragment).IFrameSize = iframebytes
 					fragment.(*Fragment).Keyframe = true
+					if len(stream.keyframes) > config.Ingester.HeapSize/int(config.Ingester.SegmentDuration/1000) {
+						deleteRange(
+							&stream.fragments,
+							stream.keyframes[0].Sequence,
+							stream.keyframes[1].Sequence-1,
+							func(v interface{}) {
+								unix.Close(int(v.(*Fragment).fd.Fd()))
+								v.(*Fragment).fd.Unmap()
+							},
+						)
 					}
 				}
 
@@ -115,4 +125,15 @@ func (stream *InputStream) Parse(data io.Reader) {
 		default:
 		}
 	}
+}
+// deletes all keys in the range [min, max] inclusive
+func deleteRange(m *sync.Map, min, max uint32, callback func(interface{})) {
+	m.Range(func(key, value interface{}) bool {
+		k := key.(uint32)
+		if k >= min && k <= max {
+			callback(value)
+			m.Delete(k)
+		}
+		return true
+	})
 }

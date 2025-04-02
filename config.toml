@@ -1,6 +1,8 @@
 [Ingester]
 Horizon = 4               # this is the minimum latency in fragments [number of fragments]
 ControllerFrequency = 2   # how often the fragment samples are sent [number of fragments]
+HeapSize = 60             # minimum fragments to keep in memory [number of fragments]
+
 Pipe = "/dev/shm/repr_1280x720"
 
 [Representations.sd]
