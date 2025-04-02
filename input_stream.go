@@ -68,7 +68,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 			stream.repr.Width, stream.repr.Height = parser.GetResolution()
 			stream.timescale = parser.GetVideoTimescale()
 
-			fmt.Println(stream.repr.Id, "# Received moov atom at", stream.timestamp)
+			fmt.Println(stream.repr.Id, "# Received moov atom at", stream.timestamp, "with resolution", stream.repr.Width, "x", stream.repr.Height, "and timescale", stream.timescale)
 			break
 
 		case "moof":
@@ -100,6 +100,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 				file.SetSize(int64(fragment.(*Fragment).ByteLength))
 				fragment.(*Fragment).fd = file
 
+				pts := (fragment.(*Fragment).Pts)
 				iframebytes := GetIFrameSize(fullAtom)
 				isIFrame := "X" // just debugging
 				if iframebytes > 0 {
@@ -117,6 +118,10 @@ func (stream *InputStream) Parse(data io.Reader) {
 							},
 						)
 					}
+				}
+
+				if stream.repr.Log == true {
+					fmt.Printf("%s - Repr %s\tFrag %d\tPTS %02d:%02d\tSize %d [%d]\n", isIFrame, stream.repr.Id, fragment.(*Fragment).Sequence, int(pts/60), int(math.Mod(float64(pts), 60)), fragment.(*Fragment).ByteLength, iframebytes)
 				}
 
 				stream.fragmentsWindow.Add(fragment.(*Fragment))

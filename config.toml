@@ -1,14 +1,22 @@
 [Ingester]
+FragmentDuration = 1000   # from muxer `-frag_duration` [milliseconds]
+SegmentDuration = 4000    # how to merge fragments into segments [multiple of fragment - milliseconds]
 Horizon = 4               # this is the minimum latency in fragments [number of fragments]
 ControllerFrequency = 2   # how often the fragment samples are sent [number of fragments]
 HeapSize = 60             # minimum fragments to keep in memory [number of fragments]
 
-Pipe = "/dev/shm/repr_1280x720"
+# The following are the resolutions that the ingester will generate
+# Keep them in lexically increasing order
 
-[Representations.sd]
+
+[Representations.c]
+Pipe = "/dev/shm/repr_1280x720"
+Log = true
+
+[Representations.b]
 Pipe = "/dev/shm/repr_1024x576"
 
-[Representations.lq]
+[Representations.a]
 Pipe = "/dev/shm/repr_480x270"
 
 [Server]
