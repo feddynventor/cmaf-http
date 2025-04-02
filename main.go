@@ -12,20 +12,26 @@ import (
 )
 
 type Config struct {
-	Representations map[string]Representation
+	Representations map[string]*Representation
 	Server          Server
 	Ingester        Ingester
 }
 
 type Representation struct {
-	Width     uint32
-	Height    uint32
-	Pipe      string
-	Id        string
-	Timescale uint32
+	Width     uint32 `json:"width"`
+	Height    uint32 `json:"height"`
+	Log       bool   `json:"-"`
+	Pipe      string `json:"-"`
+	Id        string `json:"-"`
+	Timescale uint32 `json:"-"`
 }
 
+type Forecast map[string][]*Fragment // per each presentation - contains Update, or size of the fragment + keyframe flag
+
 type Ingester struct {
+	HeapSize            int    `json:"-"`
+	FragmentDuration    uint32 `json:"fragment_duration"`
+	SegmentDuration     uint32 `json:"segment_duration"`
 	ControllerFrequency int    `json:"controller_frequency"`
 	Horizon             int    `json:"horizon"`
 }
@@ -124,37 +130,31 @@ func main() {
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		sizes_map := make(map[string][]uint32)
-		latest_time := streams[0].timestamp
-
-		last_frag := streams[0].lastFrag
+		common_start_time := streams[0].timestamp
 
 		for _, stream := range streams {
 			// gli stream potrebbero essere inizializzati in tempi diversi (primo moov atom)
-			// si assume però che i dati arrivino in sincronia
-			if stream.timestamp.After(latest_time) {
-				latest_time = stream.timestamp
-			}
-
-			// TODO: qui si incorre in inconsistenza se per una traccia non è ancora arrivato il nuovo segmento e la window non shifta
-			sizes_map[stream.repr.Id] = stream.sizesWindow
-
-			// ritorno il frammento con PTS presente su tutti gli stream
-			if stream.lastFrag.Pts < last_frag.Pts {
-				fmt.Println(" !! PTS drift !! ")
-				last_frag = stream.lastFrag
+			if stream.timestamp.After(common_start_time) {
+				common_start_time = stream.timestamp
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Timing-Allow-Origin", "*")
+
+		keyframes := make(map[string][]*Fragment)
+		for _, stream := range streams {
+			keyframes[stream.repr.Id] = stream.keyframes
+		}
+
 		w.WriteHeader(http.StatusOK)
+
 		json.NewEncoder(w).Encode(Manifest{
-			Config:   config.Ingester,
-			Start:    latest_time,
-			Epoch:    uint64(latest_time.UnixMilli()),
-			Forecast: sizes_map,
-			Last:     last_frag,
+			Config:          config.Ingester,
+			Start:           common_start_time,
+			Epoch:           uint64(common_start_time.UnixMilli()),
+			Representations: config.Representations,
+			Keyframes:       keyframes,
 		})
 	})
 	http.ListenAndServe(config.Server.Address, nil)

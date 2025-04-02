@@ -30,7 +30,7 @@ type InputStream struct {
 	moov            []byte
 	timestamp       time.Time
 	fragmentsWindow *CircularBuffer[Fragment]
-	sizesWindow   []uint32
+	keyframes       []*Fragment // so that you do not traverse the sync.Map at every Manifest request (locking)
 }
 
 func (stream *InputStream) Parse(data io.Reader) {
@@ -83,7 +83,6 @@ func (stream *InputStream) Parse(data io.Reader) {
 				Sequence:   seq,
 				Pts:        pts,
 			})
-			stream.fragments.Delete(stream.lastSeqNumber - 50)
 			break
 
 		case "mdat":
@@ -95,7 +94,6 @@ func (stream *InputStream) Parse(data io.Reader) {
 				file.Write(fragment.(*Fragment).moof)
 				file.Write(fullAtom)
 				file.SetImmutable()
-				// fragment.(*Fragment).data = file // TODO: representation specific fragment file descriptor
 				file.Seek(0, io.SeekStart)
 				file.SetSize(int64(fragment.(*Fragment).ByteLength))
 				fragment.(*Fragment).fd = file
@@ -107,6 +105,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 					isIFrame = "I" // just debugging
 					fragment.(*Fragment).IFrameSize = iframebytes
 					fragment.(*Fragment).Keyframe = true
+					stream.AddKeyframe(fragment.(*Fragment))
 					if len(stream.keyframes) > config.Ingester.HeapSize/int(config.Ingester.SegmentDuration/1000) {
 						deleteRange(
 							&stream.fragments,
@@ -131,6 +130,55 @@ func (stream *InputStream) Parse(data io.Reader) {
 		}
 	}
 }
+
+func (stream *InputStream) GetPlayableFragment(index uint32) (*Fragment, int) {
+	currentKey := index
+	for {
+		if val, ok := stream.fragments.Load(currentKey); ok {
+			if val.(*Fragment).Keyframe == true {
+				return val.(*Fragment), int(currentKey)
+			}
+		} else {
+			return nil, 0
+		}
+		currentKey--
+	}
+}
+
+func (stream *InputStream) GetLastFragment() *Fragment {
+	if val, ok := stream.fragments.Load(stream.lastSeqNumber); ok {
+		return val.(*Fragment)
+	}
+	return nil
+}
+
+// get all the fragments starting from the given one until you find a keyframe fragment (not to include, as it's the next one)
+// return the number of fragments of the segment
+func (stream *InputStream) GetNextFragments(keyframe *Fragment) ([]*Fragment, int) {
+	var fragments []*Fragment
+	currentKey := keyframe.Sequence + 1
+	for {
+		if val, ok := stream.fragments.Load(currentKey); ok {
+			if val.(*Fragment).Keyframe == true {
+				break
+			}
+			fragments = append(fragments, val.(*Fragment))
+		} else {
+			return nil, 0
+		}
+		currentKey++
+	}
+	return append([]*Fragment{keyframe}, fragments...), len(fragments) + 1 // include the keyframe
+}
+
+// method to add a keyframe fragment to the array and that trims the array if PTS is too old
+func (stream *InputStream) AddKeyframe(frag *Fragment) {
+	stream.keyframes = append(stream.keyframes, frag)
+	if stream.keyframes[0].Pts < frag.Pts-float32(config.Ingester.HeapSize) {
+		stream.keyframes = stream.keyframes[1:]
+	}
+}
+
 // deletes all keys in the range [min, max] inclusive
 func deleteRange(m *sync.Map, min, max uint32, callback func(interface{})) {
 	m.Range(func(key, value interface{}) bool {
