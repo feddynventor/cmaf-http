@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -131,7 +132,7 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		common_start_time := streams[0].timestamp
-lastSeqNumber := uint32(streams[0].lastSeqNumber)
+		lastSeqNumber := uint32(streams[0].lastSeqNumber)
 
 		for _, stream := range streams {
 			// gli stream _possono_ essere inizializzati in tempi diversi (primo moov atom)
@@ -146,6 +147,8 @@ lastSeqNumber := uint32(streams[0].lastSeqNumber)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Expose-Headers", "ruddr-time")
+		w.Header().Set("ruddr-time", fmt.Sprintf("%d", time.Now().UnixMilli()))
 		w.Header().Set("Timing-Allow-Origin", "*")
 
 		keyframes := make(map[string][]*Fragment)

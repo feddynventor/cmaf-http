@@ -34,12 +34,10 @@ func (stream *InputStream) Serve() {
 		w.Header().Set("Timing-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Expose-Headers", "ruddr-pts, ruddr-segment-length")
 
-		// useful for client sync with server
-		if f := stream.GetLastFragment(); f != nil {
-			w.Header().Set("Ruddr-Head-Pts", fmt.Sprintf("%f", f.Pts))
-		} else {
+		// stream not yet initialized
+		if f := stream.GetLastFragment(); f == nil {
 			w.WriteHeader(http.StatusNotAcceptable)
-			return // stream not yet initialized
+			return
 		}
 
 		if noIndexProvided != nil {
@@ -68,6 +66,9 @@ func (stream *InputStream) Serve() {
 			return
 		}
 
+		// debugging timestamp only
+		// w.Header().Set("ruddr-ingester", stream.timestamp.Add(time.Duration(fragment.Pts*float32(math.Pow10(9)))).Format(time.RFC3339Nano))
+		w.Header().Set("Ruddr-Pts", fmt.Sprintf("%.4f", fragment.Pts))    // keyframe presentation time
 		w.Header().Set("Ruddr-Segment-Length", fmt.Sprintf("%d", amount)) // length in fragments
 		// the next keyframed fragment can be calculated as = current + amount
 
