@@ -20,6 +20,7 @@ type Manifest struct {
 	Config          Ingester                   `json:"config"`
 	Start           time.Time                  `json:"start"`
 	Epoch           uint64                     `json:"epoch"`
+	Head            uint32                     `json:"head"`
 	Representations map[string]*Representation `json:"representations"`
 	Keyframes       map[string][]*Fragment     `json:"keyframes"`
 }
@@ -31,7 +32,7 @@ func (stream *InputStream) Serve() {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Timing-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Expose-Headers", "ruddr-head-pts, ruddr-segment-length")
+		w.Header().Set("Access-Control-Expose-Headers", "ruddr-pts, ruddr-segment-length")
 
 		// useful for client sync with server
 		if f := stream.GetLastFragment(); f != nil {
