@@ -69,21 +69,37 @@ func (stream *InputStream) Parse(data io.Reader) {
 			stream.timescale = parser.GetVideoTimescale()
 
 			fmt.Println(stream.repr.Id, "# Received moov atom at", stream.timestamp, "with resolution", stream.repr.Width, "x", stream.repr.Height, "and timescale", stream.timescale)
-			break
 
 		case "moof":
 			p := NewMP4Parser(stream.moov, fullAtom)
 			pts := p.GetPTS(stream.timescale)
 			seq := p.GetSequenceNumber()
+			iframe := p.IsIFrame()
 
-			stream.lastSeqNumber = seq
-			stream.fragments.Store(seq, &Fragment{
+			fragment := &Fragment{
 				moof:       fullAtom, // underlying data in slices is always passed by reference
 				ByteLength: uint32(atomSize),
 				Sequence:   seq,
 				Pts:        pts,
-			})
-			break
+				Keyframe:   iframe,
+			}
+
+			if iframe {
+				stream.AddKeyframe(fragment)
+				if len(stream.keyframes) > config.Ingester.HeapSize/int(config.Ingester.SegmentDuration/1000) {
+					deleteRange(
+						&stream.fragments,
+						stream.keyframes[0].Sequence,
+						stream.keyframes[1].Sequence-1,
+						func(v interface{}) {
+							unix.Close(int(v.(*Fragment).fd.Fd()))
+							v.(*Fragment).fd.Unmap()
+						},
+					)
+				}
+			}
+			stream.fragments.Store(seq, fragment)
+			stream.lastSeqNumber = seq
 
 		case "mdat":
 			if fragment, ok := stream.fragments.Load(stream.lastSeqNumber); ok { // handles synchronization and semaphores internally
@@ -99,34 +115,20 @@ func (stream *InputStream) Parse(data io.Reader) {
 				fragment.(*Fragment).fd = file
 
 				pts := (fragment.(*Fragment).Pts)
-				iframebytes := GetIFrameSize(fullAtom)
 				isIFrame := "X" // just debugging
-				if iframebytes > 0 {
+				if fragment.(*Fragment).Keyframe {
 					isIFrame = "I" // just debugging
-					fragment.(*Fragment).IFrameSize = iframebytes
-					fragment.(*Fragment).Keyframe = true
-					stream.AddKeyframe(fragment.(*Fragment))
-					if len(stream.keyframes) > config.Ingester.HeapSize/int(config.Ingester.SegmentDuration/1000) {
-						deleteRange(
-							&stream.fragments,
-							stream.keyframes[0].Sequence,
-							stream.keyframes[1].Sequence-1,
-							func(v interface{}) {
-								unix.Close(int(v.(*Fragment).fd.Fd()))
-								v.(*Fragment).fd.Unmap()
-							},
-						)
-					}
 				}
 
-				if stream.repr.Log == true {
+				iframebytes := GetIFrameSize(fullAtom)
+				fragment.(*Fragment).IFrameSize = iframebytes
+
+				if stream.repr.Log {
 					fmt.Printf("%s - Repr %s\tFrag %d\tPTS %02d:%02d\tSize %d [%d]\n", isIFrame, stream.repr.Id, fragment.(*Fragment).Sequence, int(pts/60), int(math.Mod(float64(pts), 60)), fragment.(*Fragment).ByteLength, iframebytes)
 				}
 
 				stream.fragmentsWindow.Add(fragment.(*Fragment))
 			}
-			break
-		default:
 		}
 	}
 }
@@ -135,7 +137,7 @@ func (stream *InputStream) GetPlayableFragment(index uint32) (*Fragment, int) {
 	currentKey := index
 	for {
 		if val, ok := stream.fragments.Load(currentKey); ok {
-			if val.(*Fragment).Keyframe == true {
+			if val.(*Fragment).Keyframe {
 				return val.(*Fragment), int(currentKey)
 			}
 		} else {
@@ -159,7 +161,7 @@ func (stream *InputStream) GetNextFragments(keyframe *Fragment) ([]*Fragment, in
 	currentKey := keyframe.Sequence + 1
 	for {
 		if val, ok := stream.fragments.Load(currentKey); ok {
-			if val.(*Fragment).Keyframe == true {
+			if val.(*Fragment).Keyframe {
 				break
 			}
 			fragments = append(fragments, val.(*Fragment))

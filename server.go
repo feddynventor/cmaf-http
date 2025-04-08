@@ -51,7 +51,11 @@ func (stream *InputStream) Serve() {
 		}
 
 		// Failsafe - return a segment starting from the keyframe which references the requested fragment
-		fragment, _ := stream.GetPlayableFragment(uint32(index))
+		fragment, keyedIndex := stream.GetPlayableFragment(uint32(index))
+		if keyedIndex != int(index) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		if fragment == nil {
 			// IMPR: you can redirect 302 to the correct resource or segment
 			w.WriteHeader(http.StatusNotFound)
