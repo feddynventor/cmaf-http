@@ -106,7 +106,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 					fragment.(*Fragment).IFrameSize = iframebytes
 					fragment.(*Fragment).Keyframe = true
 					stream.AddKeyframe(fragment.(*Fragment))
-					if len(stream.keyframes) > 1 && stream.keyframes[0].Sequence < (stream.lastSeqNumber-config.Ingester.HeapSize) {
+					if len(stream.keyframes) > 1 && stream.lastSeqNumber > config.Ingester.HeapSize && stream.keyframes[0].Sequence < (stream.lastSeqNumber-config.Ingester.HeapSize) {
 						deleteRange(
 							&stream.fragments,
 							stream.keyframes[0].Sequence,
