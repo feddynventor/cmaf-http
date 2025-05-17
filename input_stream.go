@@ -69,6 +69,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 			stream.timescale = parser.GetVideoTimescale()
 
 			fmt.Println(stream.repr.Id, "# Received moov atom at", stream.timestamp, "with resolution", stream.repr.Width, "x", stream.repr.Height, "and timescale", stream.timescale)
+			break
 
 		case "moof":
 			p := NewMP4Parser(stream.moov, fullAtom)
@@ -82,6 +83,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 				Sequence:   seq,
 				Pts:        pts,
 			})
+			break
 
 		case "mdat":
 			if fragment, ok := stream.fragments.Load(stream.lastSeqNumber); ok { // handles synchronization and semaphores internally
@@ -99,7 +101,7 @@ func (stream *InputStream) Parse(data io.Reader) {
 				pts := (fragment.(*Fragment).Pts)
 				iframebytes := GetIFrameSize(fullAtom)
 				isIFrame := "X" // just debugging
-				if fragment.(*Fragment).Keyframe {
+				if iframebytes > 0 {
 					isIFrame = "I" // just debugging
 					fragment.(*Fragment).IFrameSize = iframebytes
 					fragment.(*Fragment).Keyframe = true
@@ -123,6 +125,8 @@ func (stream *InputStream) Parse(data io.Reader) {
 
 				stream.fragmentsWindow.Add(fragment.(*Fragment))
 			}
+			break
+		default:
 		}
 	}
 }
@@ -131,7 +135,7 @@ func (stream *InputStream) GetPlayableFragment(index uint32) (*Fragment, int) {
 	currentKey := index
 	for {
 		if val, ok := stream.fragments.Load(currentKey); ok {
-			if val.(*Fragment).Keyframe {
+			if val.(*Fragment).Keyframe == true {
 				return val.(*Fragment), int(currentKey)
 			}
 		} else {
@@ -155,7 +159,7 @@ func (stream *InputStream) GetNextFragments(keyframe *Fragment) ([]*Fragment, in
 	currentKey := keyframe.Sequence + 1
 	for {
 		if val, ok := stream.fragments.Load(currentKey); ok {
-			if val.(*Fragment).Keyframe {
+			if val.(*Fragment).Keyframe == true {
 				break
 			}
 			fragments = append(fragments, val.(*Fragment))
