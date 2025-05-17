@@ -30,9 +30,8 @@ type Representation struct {
 type Forecast map[string][]*Fragment // per each presentation - contains Update, or size of the fragment + keyframe flag
 
 type Ingester struct {
-	HeapSize            int    `json:"-"`
+	HeapSize            uint32 `json:"-"`
 	FragmentDuration    uint32 `json:"fragment_duration"`
-	SegmentDuration     uint32 `json:"segment_duration"`
 	ControllerFrequency int    `json:"controller_frequency"`
 	Horizon             int    `json:"horizon"`
 }
