@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -131,15 +132,23 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		common_start_time := streams[0].timestamp
+		lastSeqNumber := uint32(streams[0].lastSeqNumber)
 
 		for _, stream := range streams {
-			// gli stream potrebbero essere inizializzati in tempi diversi (primo moov atom)
+			// gli stream _possono_ essere inizializzati in tempi diversi (primo moov atom)
 			if stream.timestamp.After(common_start_time) {
 				common_start_time = stream.timestamp
+			}
+			// gli stream _dovrebbero_ avere in sincronia lo stesso numero di sequenza
+			if stream.lastSeqNumber < lastSeqNumber {
+				lastSeqNumber = stream.lastSeqNumber
+				fmt.Println("! SEQ number mismatch ! Gathering lowest !z")
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Expose-Headers", "ruddr-time")
+		w.Header().Set("Ruddr-Time", fmt.Sprintf("%d", time.Now().UnixMilli()))
 		w.Header().Set("Timing-Allow-Origin", "*")
 
 		keyframes := make(map[string][]*Fragment)
@@ -152,6 +161,7 @@ func main() {
 		json.NewEncoder(w).Encode(Manifest{
 			Config:          config.Ingester,
 			Start:           common_start_time,
+			Head:            lastSeqNumber,
 			Epoch:           uint64(common_start_time.UnixMilli()),
 			Representations: config.Representations,
 			Keyframes:       keyframes,

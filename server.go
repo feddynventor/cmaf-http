@@ -20,6 +20,7 @@ type Manifest struct {
 	Config          Ingester                   `json:"config"`
 	Start           time.Time                  `json:"start"`
 	Epoch           uint64                     `json:"epoch"`
+	Head            uint32                     `json:"head"`
 	Representations map[string]*Representation `json:"representations"`
 	Keyframes       map[string][]*Fragment     `json:"keyframes"`
 }
@@ -31,14 +32,12 @@ func (stream *InputStream) Serve() {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Timing-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Expose-Headers", "ruddr-head-pts, ruddr-segment-length")
+		w.Header().Set("Access-Control-Expose-Headers", "ruddr-pts, ruddr-segment-length")
 
-		// useful for client sync with server
-		if f := stream.GetLastFragment(); f != nil {
-			w.Header().Set("Ruddr-Head-Pts", fmt.Sprintf("%f", f.Pts))
-		} else {
+		// stream not yet initialized
+		if f := stream.GetLastFragment(); f == nil {
 			w.WriteHeader(http.StatusNotAcceptable)
-			return // stream not yet initialized
+			return
 		}
 
 		if noIndexProvided != nil {
@@ -51,8 +50,12 @@ func (stream *InputStream) Serve() {
 			return
 		}
 
-		// Failsafe - return a segment starting from the keyframe which references the requested fragment
-		fragment, _ := stream.GetPlayableFragment(uint32(index))
+		// if requested is not a keyframe, it's a bad request
+		fragment, keyedIndex := stream.GetPlayableFragment(uint32(index))
+		if keyedIndex != int(index) {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		if fragment == nil {
 			// IMPR: you can redirect 302 to the correct resource or segment
 			w.WriteHeader(http.StatusNotFound)
@@ -67,6 +70,9 @@ func (stream *InputStream) Serve() {
 			return
 		}
 
+		// debugging timestamp only
+		// w.Header().Set("ruddr-ingester", stream.timestamp.Add(time.Duration(fragment.Pts*float32(math.Pow10(9)))).Format(time.RFC3339Nano))
+		w.Header().Set("Ruddr-Pts", fmt.Sprintf("%.4f", fragment.Pts))    // keyframe presentation time
 		w.Header().Set("Ruddr-Segment-Length", fmt.Sprintf("%d", amount)) // length in fragments
 		// the next keyframed fragment can be calculated as = current + amount
 
