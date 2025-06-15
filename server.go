@@ -52,14 +52,14 @@ func (stream *InputStream) Serve() {
 
 		// if requested is not a keyframe, it's a bad request
 		fragment, keyedIndex := stream.GetPlayableFragment(uint32(index))
-		if keyedIndex != int(index) {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
 		if fragment == nil {
 			// IMPR: you can redirect 302 to the correct resource or segment
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "Fragment %d not found", index)
+			return
+		}
+		if keyedIndex != int(index) {
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
