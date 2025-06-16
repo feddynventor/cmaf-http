@@ -75,33 +75,18 @@ func (stream *InputStream) Parse(data io.Reader) {
 			p := NewMP4Parser(stream.moov, fullAtom)
 			pts := p.GetPTS(stream.timescale)
 			seq := p.GetSequenceNumber()
-			isIFrame := p.IsIFrame()
 
 			frag := &Fragment{
 				moof:       fullAtom, // underlying data in slices is always passed by reference
 				ByteLength: uint32(atomSize),
 				Sequence:   seq,
 				Pts:        pts,
-				Keyframe:   isIFrame,
+				Keyframe:   p.IsIFrame(),
 			}
 
 			stream.lastSeqNumber = seq
 			stream.fragments.Store(seq, frag)
 
-			if isIFrame {
-				stream.AddKeyframe(frag)
-				if len(stream.keyframes) > 1 && stream.lastSeqNumber > config.Ingester.HeapSize && stream.keyframes[0].Sequence < (stream.lastSeqNumber-config.Ingester.HeapSize) {
-					deleteRange(
-						&stream.fragments,
-						stream.keyframes[0].Sequence,
-						stream.keyframes[1].Sequence-1,
-						func(v interface{}) {
-							unix.Close(int(v.(*Fragment).fd.Fd()))
-							v.(*Fragment).fd.Unmap()
-						},
-					)
-				}
-			}
 			break
 
 		case "mdat":
@@ -120,7 +105,20 @@ func (stream *InputStream) Parse(data io.Reader) {
 				pts := (fragment.(*Fragment).Pts)
 				isIFrame := "X"
 				if fragment.(*Fragment).Keyframe {
+					fragment.(*Fragment).IFrameSize = GetIFrameSize(fullAtom) // look inside NAL only if sample keyframe
 					isIFrame = "I"
+					stream.AddKeyframe(fragment.(*Fragment))
+					if len(stream.keyframes) > 1 && stream.lastSeqNumber > config.Ingester.HeapSize && stream.keyframes[0].Sequence < (stream.lastSeqNumber-config.Ingester.HeapSize) {
+						deleteRange(
+							&stream.fragments,
+							stream.keyframes[0].Sequence,
+							stream.keyframes[1].Sequence-1,
+							func(v interface{}) {
+								unix.Close(int(v.(*Fragment).fd.Fd()))
+								v.(*Fragment).fd.Unmap()
+							},
+						)
+					}
 				}
 
 				if stream.repr.Log == true {
