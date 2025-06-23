@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/justincormack/go-memfd"
-	"golang.org/x/sys/unix"
 )
 
 type Fragment struct {
@@ -109,13 +108,12 @@ func (stream *InputStream) Parse(data io.Reader) {
 					isIFrame = "I"
 					stream.AddKeyframe(fragment.(*Fragment))
 					if len(stream.keyframes) > 1 && stream.lastSeqNumber > config.Ingester.HeapSize && stream.keyframes[0].Sequence < (stream.lastSeqNumber-config.Ingester.HeapSize) {
-						deleteRange(
+						deleteOlder(
 							&stream.fragments,
-							stream.keyframes[0].Sequence,
 							stream.keyframes[1].Sequence-1,
 							func(v interface{}) {
-								unix.Close(int(v.(*Fragment).fd.Fd()))
 								v.(*Fragment).fd.Unmap()
+								v.(*Fragment).fd.Close()
 							},
 						)
 					}
@@ -177,7 +175,10 @@ func (stream *InputStream) GetNextFragments(keyframe *Fragment) ([]*Fragment, in
 func (stream *InputStream) AddKeyframe(frag *Fragment) {
 	stream.keyframes = append(stream.keyframes, frag)
 	if stream.keyframes[0].Pts < frag.Pts-float32(config.Ingester.HeapSize) {
+		stream.keyframes[0] = nil
 		stream.keyframes = stream.keyframes[1:]
+		// f, _ := ConvertSyncMapToMap[[]Fragment](&stream.fragments)
+		// fmt.Println("%v\n%v", f, stream.keyframes)
 	}
 }
 
@@ -186,6 +187,16 @@ func deleteRange(m *sync.Map, min, max uint32, callback func(interface{})) {
 	m.Range(func(key, value interface{}) bool {
 		k := key.(uint32)
 		if k >= min && k <= max {
+			callback(value)
+			m.Delete(k)
+		}
+		return true
+	})
+}
+func deleteOlder(m *sync.Map, max uint32, callback func(interface{})) {
+	m.Range(func(key, value interface{}) bool {
+		k := key.(uint32)
+		if k <= max {
 			callback(value)
 			m.Delete(k)
 		}

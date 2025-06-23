@@ -30,6 +30,7 @@ func (cb *CircularBuffer[T]) Add(value *T) {
 
 	// Overwrite the oldest value if the buffer is full
 	if cb.count == cb.size {
+		cb.data[cb.start] = nil
 		cb.start = (cb.start + 1) % cb.size
 	} else {
 		cb.count++
