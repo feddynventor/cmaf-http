@@ -59,7 +59,7 @@ func main() {
 		fmt.Printf("Failed to start broadcaster: %v", err)
 	}
 	defer broadcaster.Stop()
-	http.HandleFunc("/events", broadcaster.HandlerFunc())
+	http.HandleFunc(config.Server.Root+"/events", broadcaster.HandlerFunc())
 
 	var wg sync.WaitGroup
 
@@ -90,8 +90,6 @@ func main() {
 				if w, ok := forecast.Load(stream.fragmentsWindow.latest.Pts); ok {
 					// IMPR: len for sync.Maps is not available
 					regularMap, count := ConvertSyncMapToMap[[]*Fragment](w.(*sync.Map))
-
-					// fmt.Println(regularMap)
 
 					// group all representation per update
 					if count < len(config.Representations) {
@@ -129,7 +127,7 @@ func main() {
 
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(config.Server.Root+"/", func(w http.ResponseWriter, r *http.Request) {
 		common_start_time := streams[0].timestamp
 		lastSeqNumber := uint32(streams[0].lastSeqNumber)
 
@@ -144,6 +142,8 @@ func main() {
 				fmt.Println("! SEQ number mismatch ! Gathering lowest !z")
 			}
 		}
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Expires", "0")
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Expose-Headers", "ruddr-time")

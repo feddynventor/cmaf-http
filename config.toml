@@ -20,3 +20,4 @@ Pipe = "/dev/shm/repr_480x270"
 
 [Server]
 Address = "0.0.0.0:8080"
+Root = "/mux"

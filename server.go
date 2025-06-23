@@ -14,6 +14,7 @@ import (
 
 type Server struct {
 	Address string
+	Root string
 }
 
 type Manifest struct {
@@ -26,13 +27,8 @@ type Manifest struct {
 }
 
 func (stream *InputStream) Serve() {
-	http.HandleFunc("/"+stream.repr.Id+"/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(config.Server.Root+"/"+stream.repr.Id+"/", func(w http.ResponseWriter, r *http.Request) {
 		index, noIndexProvided := strconv.ParseUint(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:], 10, 64)
-
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Timing-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Expose-Headers", "ruddr-pts, ruddr-segment-length")
 
 		// stream not yet initialized
 		if f := stream.GetLastFragment(); f == nil {
@@ -40,8 +36,11 @@ func (stream *InputStream) Serve() {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Timing-Allow-Origin", "*")
+		
 		if noIndexProvided != nil {
-			w.Header().Set("Cache-Control", "no-cache")
 			w.WriteHeader(http.StatusOK)
 			// io.Copy(w, bytes.NewReader(stream.moov))  // TODO: compare
 			if _, err := w.Write(stream.moov); err != nil {
@@ -65,6 +64,7 @@ func (stream *InputStream) Serve() {
 
 		segment, amount := stream.GetNextFragments(fragment)
 		if segment == nil {
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 			w.WriteHeader(http.StatusNotFound)
 			fmt.Fprintf(w, "Segment starting from fragment %d not complete yet", index)
 			return
@@ -75,6 +75,9 @@ func (stream *InputStream) Serve() {
 		w.Header().Set("Ruddr-Pts", fmt.Sprintf("%.4f", fragment.Pts))    // keyframe presentation time
 		w.Header().Set("Ruddr-Segment-Length", fmt.Sprintf("%d", amount)) // length in fragments
 		// the next keyframed fragment can be calculated as = current + amount
+
+		w.Header().Set("Cache-Control", "public, max-age=180") //TODO: param
+		w.Header().Set("Access-Control-Expose-Headers", "ruddr-pts, ruddr-segment-length")
 
 		fds := make([]*memfd.Memfd, 0)
 		segmentSize := int64(0)
